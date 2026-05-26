@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ChevronLeft, Heart, Share2, Plus, LogIn } from 'lucide-react'
 import { Button, Loader } from '../components/common'
-import { CafeInfo } from '../components/cafe'
+import { CafeInfo, CafePlaceholderImage } from '../components/cafe'
 import { PhotoGallery } from '../components/photo'
 import { ReviewList, ReviewForm } from '../components/review'
 import { useCafe, useReviews, useFavorites } from '../hooks'
@@ -72,7 +72,8 @@ export default function CafeProfile() {
     )
   }
 
-  const allImages = [cafe.coverImage, ...(cafe.images || [])].filter(Boolean)
+  const reviewImages = reviews.flatMap(r => r.images || [])
+  const allImages = [cafe.coverImage, ...(cafe.images || []), ...reviewImages].filter(Boolean)
 
   return (
     <div className="min-h-screen bg-white">
@@ -112,7 +113,10 @@ export default function CafeProfile() {
       <div className="max-w-4xl mx-auto pb-24 md:pb-8">
         {/* Photo Gallery */}
         <div className="px-4 mb-6">
-          <PhotoGallery images={allImages} />
+          {allImages.length > 0
+            ? <PhotoGallery images={allImages} />
+            : <CafePlaceholderImage className="w-full h-64 rounded-xl" />
+          }
         </div>
 
         {/* Content grid for desktop */}
@@ -128,7 +132,10 @@ export default function CafeProfile() {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">
-                  Reviews ({cafe.totalReviews || 0})
+                  {cafe.totalReviews > 0
+                    ? `Reviews (${cafe.totalReviews})`
+                    : 'Be the first to review!'
+                  }
                 </h2>
                 {!showReviewForm && (
                   <Button

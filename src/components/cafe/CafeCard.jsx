@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { MapPin, Heart, DollarSign } from 'lucide-react'
-import { Rating, Tag, Card } from '../common'
+import { Tag, Card } from '../common'
 import { useFavorites } from '../../hooks'
 import { useAuth } from '../../context/AuthContext'
+import CafePlaceholderImage from './CafePlaceholderImage'
 
 export default function CafeCard({ cafe, distance }) {
   const navigate = useNavigate()
@@ -27,11 +28,10 @@ export default function CafeCard({ cafe, distance }) {
     >
       {/* Cover Image */}
       <div className="relative h-40 md:h-48">
-        <img
-          src={cafe.coverImage || 'https://images.unsplash.com/photo-1515823064-d6e0c04616a7?w=800'}
-          alt={cafe.name}
-          className="w-full h-full object-cover"
-        />
+        {cafe.coverImage
+          ? <img src={cafe.coverImage} alt={cafe.name} className="w-full h-full object-cover" />
+          : <CafePlaceholderImage className="w-full h-full" />
+        }
         <button
           onClick={handleFavoriteClick}
           className={`
@@ -65,7 +65,6 @@ export default function CafeCard({ cafe, distance }) {
           <h3 className="font-semibold text-gray-900 text-lg leading-tight">
             {cafe.name}
           </h3>
-          <Rating value={cafe.averageRating || 0} size="sm" showValue />
         </div>
 
         <div className="flex items-center gap-1 text-sm text-gray-500 mb-3">
