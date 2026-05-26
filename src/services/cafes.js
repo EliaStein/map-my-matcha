@@ -7,6 +7,7 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -38,9 +39,10 @@ export async function addCafe(cafeData) {
   }
 }
 
-export async function getCafes(filters = {}) {
+const PAGE_SIZE = 20
+
+export async function getCafes(filters = {}, cursor = null) {
   try {
-    let q = collection(db, CAFES_COLLECTION)
     const constraints = []
 
     if (filters.isOrganic) {
@@ -55,23 +57,24 @@ export async function getCafes(filters = {}) {
     if (filters.hasNonDairyMilk) {
       constraints.push(where('hasNonDairyMilk', '==', true))
     }
-    if (filters.maxPrice) {
-      constraints.push(where('priceLevel', '<=', filters.maxPrice))
-    }
+    // priceLevel is filtered client-side to avoid range+orderBy conflict
 
     constraints.push(orderBy('averageRating', 'desc'))
+    constraints.push(limit(PAGE_SIZE))
 
-    if (filters.limit) {
-      constraints.push(limit(filters.limit))
+    if (cursor) {
+      constraints.push(startAfter(cursor))
     }
 
-    q = query(q, ...constraints)
+    const q = query(collection(db, CAFES_COLLECTION), ...constraints)
     const snapshot = await getDocs(q)
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1] ?? null
 
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }))
+    return {
+      cafes: snapshot.docs.map(d => ({ id: d.id, ...d.data() })),
+      lastDoc,
+      hasMore: snapshot.docs.length === PAGE_SIZE
+    }
   } catch (error) {
     console.error('Error fetching cafes:', error)
     throw error
@@ -97,9 +100,28 @@ export async function getCafeById(cafeId) {
   }
 }
 
+export async function getAllCafes(filters = {}) {
+  try {
+    const constraints = []
+    if (filters.isOrganic) constraints.push(where('isOrganic', '==', true))
+    if (filters.isCeremonial) constraints.push(where('isCeremonial', '==', true))
+    if (filters.hasWifi) constraints.push(where('hasWifi', '==', true))
+    if (filters.hasNonDairyMilk) constraints.push(where('hasNonDairyMilk', '==', true))
+    constraints.push(orderBy('averageRating', 'desc'))
+    const snapshot = await getDocs(query(collection(db, CAFES_COLLECTION), ...constraints))
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+  } catch (error) {
+    console.error('Error fetching all cafes:', error)
+    throw error
+  }
+}
+
 export async function searchCafes(searchTerm) {
   try {
-    const cafes = await getCafes()
+    // Fetch all cafes (no cursor/limit) for full-text search across the whole dataset
+    const constraints = [orderBy('averageRating', 'desc')]
+    const snapshot = await getDocs(query(collection(db, CAFES_COLLECTION), ...constraints))
+    const cafes = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
     const term = searchTerm.toLowerCase()
 
     return cafes.filter(cafe => {
@@ -1440,6 +1462,226 @@ export async function seedSampleCafes() {
     return { success: true, count: realCafes.length }
   } catch (error) {
     console.error('Error seeding cafes:', error)
+    throw error
+  }
+}
+
+const PLACES_CITIES = [
+  { name: 'San Francisco', state: 'CA', lat: 37.7749, lng: -122.4194 },
+  { name: 'Seattle',        state: 'WA', lat: 47.6062, lng: -122.3321 },
+  { name: 'Portland',       state: 'OR', lat: 45.5051, lng: -122.6750 },
+  { name: 'Denver',         state: 'CO', lat: 39.7392, lng: -104.9903 },
+  { name: 'Atlanta',        state: 'GA', lat: 33.7490, lng: -84.3880  },
+  { name: 'Houston',        state: 'TX', lat: 29.7604, lng: -95.3698  },
+  { name: 'Phoenix',        state: 'AZ', lat: 33.4484, lng: -112.0740 },
+  { name: 'Washington',     state: 'DC', lat: 38.9072, lng: -77.0369  },
+  { name: 'Nashville',      state: 'TN', lat: 36.1627, lng: -86.7816  },
+  { name: 'Brooklyn',       state: 'NY', lat: 40.6782, lng: -73.9442  },
+]
+
+async function fetchPlacesPage(lat, lng, pageToken) {
+  const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+  const params = new URLSearchParams({ query: 'matcha', location: `${lat},${lng}`, radius: 10000, key })
+  if (pageToken) params.set('pagetoken', pageToken)
+  const res = await fetch(`/places-proxy/maps/api/place/textsearch/json?${params}`)
+  return res.json()
+}
+
+async function fetchAllForCity(city) {
+  const results = []
+  let pageToken = null
+  do {
+    const data = await fetchPlacesPage(city.lat, city.lng, pageToken)
+    if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+      console.warn(`Places API error for ${city.name}: ${data.status}`)
+      break
+    }
+    results.push(...(data.results || []))
+    pageToken = data.next_page_token || null
+    if (pageToken) await new Promise(r => setTimeout(r, 2500))
+  } while (pageToken && results.length < 60)
+  return results
+}
+
+export async function clearStubCafes() {
+  const q = query(collection(db, CAFES_COLLECTION), where('isStub', '==', true))
+  const snap = await getDocs(q)
+  for (const docSnap of snap.docs) {
+    await deleteDoc(doc(db, CAFES_COLLECTION, docSnap.id))
+  }
+  return { count: snap.size }
+}
+
+export async function seedFromGooglePlaces(onProgress) {
+  const MIN_RATING = 4.0
+  const MIN_REVIEWS = 20
+  const TOP_PERCENT = 0.10
+
+  const cafesRef = collection(db, CAFES_COLLECTION)
+  let totalSeeded = 0
+
+  for (const city of PLACES_CITIES) {
+    onProgress?.(`Searching ${city.name}...`)
+    const raw = await fetchAllForCity(city)
+
+    const qualified = raw
+      .filter(p => (p.rating ?? 0) >= MIN_RATING && (p.user_ratings_total ?? 0) >= MIN_REVIEWS)
+      .sort((a, b) => (b.rating - a.rating) || ((b.user_ratings_total ?? 0) - (a.user_ratings_total ?? 0)))
+
+    const take = Math.max(1, Math.ceil(qualified.length * TOP_PERCENT))
+    const top = qualified.slice(0, take)
+
+    for (const place of top) {
+      await addDoc(cafesRef, {
+        name: place.name,
+        address: place.formatted_address,
+        location: { lat: place.geometry.location.lat, lng: place.geometry.location.lng },
+        coverImage: null,
+        images: [],
+        isOrganic: false,
+        isCeremonial: false,
+        hasWhisk: false,
+        hasNonDairyMilk: false,
+        hasWifi: false,
+        priceLevel: place.price_level ?? 2,
+        tags: [],
+        searchTerms: [place.name.toLowerCase(), city.name.toLowerCase(), city.state.toLowerCase()],
+        averageRating: 0,
+        totalReviews: 0,
+        ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+        isStub: true,
+        description: '',
+        googlePlaceId: place.place_id,
+        googleRating: place.rating ?? null,
+        googleRatingCount: place.user_ratings_total ?? 0,
+        createdAt: serverTimestamp(),
+      })
+      totalSeeded++
+    }
+
+    onProgress?.(`${city.name}: added ${top.length} verified matcha spots`)
+  }
+
+  return { count: totalSeeded }
+}
+
+// Helper to build a stub cafe entry (no fake ratings, no photos)
+function makeStub(name, address, lat, lng, city, searchExtra = []) {
+  return {
+    name,
+    address,
+    location: { lat, lng },
+    coverImage: null,
+    images: [],
+    isOrganic: false,
+    isCeremonial: false,
+    hasWhisk: false,
+    hasNonDairyMilk: false,
+    hasWifi: false,
+    priceLevel: 2,
+    tags: [],
+    searchTerms: [name.toLowerCase(), city.toLowerCase(), ...searchExtra],
+    averageRating: 0,
+    totalReviews: 0,
+    ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+    isStub: true,
+    description: ''
+  }
+}
+
+export async function seedStubCafes() {
+  const stubs = [
+    // ============ SAN FRANCISCO ============
+    makeStub('Sightglass Coffee', '270 7th St, San Francisco, CA 94103', 37.7762, -122.4089, 'san francisco', ['soma', 'sf']),
+    makeStub('Ritual Coffee Roasters', '1026 Valencia St, San Francisco, CA 94110', 37.7557, -122.4208, 'san francisco', ['mission', 'sf']),
+    makeStub('Verve Coffee Roasters', '2101 Market St, San Francisco, CA 94114', 37.7681, -122.4342, 'san francisco', ['castro', 'sf']),
+    makeStub('Andytown Coffee Roasters', '3655 Lawton St, San Francisco, CA 94122', 37.7564, -122.4973, 'san francisco', ['inner sunset', 'sf']),
+    makeStub('Equator Coffees', '986 Market St, San Francisco, CA 94102', 37.7822, -122.4126, 'san francisco', ['tenderloin', 'sf']),
+    makeStub('Four Barrel Coffee', '375 Valencia St, San Francisco, CA 94103', 37.7664, -122.4212, 'san francisco', ['mission', 'sf']),
+    makeStub('Linea Caffe', '18 Aliso St, San Francisco, CA 94103', 37.7705, -122.4131, 'san francisco', ['soma', 'sf']),
+    makeStub('Dandelion Chocolate', '740 Valencia St, San Francisco, CA 94110', 37.7603, -122.4211, 'san francisco', ['mission', 'sf']),
+    makeStub('Réveille Coffee Co', '4 Embarcadero Center, San Francisco, CA 94111', 37.7946, -122.3975, 'san francisco', ['financial district', 'sf']),
+    makeStub('Matcha Cafe Kiyosumi', '2100 Fillmore St, San Francisco, CA 94115', 37.7886, -122.4348, 'san francisco', ['pacific heights', 'sf']),
+
+    // ============ SEATTLE ============
+    makeStub('Anchorhead Coffee', '1600 7th Ave, Seattle, WA 98101', 47.6143, -122.3337, 'seattle', ['downtown', 'seattle']),
+    makeStub('Broadcast Coffee', '2922 NE Blakeley St, Seattle, WA 98105', 47.6659, -122.2968, 'seattle', ['university district', 'u-district']),
+    makeStub('Caffe Vita', '1005 E Pike St, Seattle, WA 98122', 47.6136, -122.3194, 'seattle', ['capitol hill', 'seattle']),
+    makeStub('Tougo Coffee', '1410 18th Ave, Seattle, WA 98122', 47.6099, -122.3061, 'seattle', ['capitol hill', 'seattle']),
+    makeStub('Lighthouse Coffee', '400 N 43rd St, Seattle, WA 98103', 47.6561, -122.3472, 'seattle', ['fremont', 'seattle']),
+    makeStub('Fonte Coffee Roaster', '1321 1st Ave, Seattle, WA 98101', 47.6076, -122.3388, 'seattle', ['pike place', 'downtown', 'seattle']),
+    makeStub('Elm Coffee Roasters', '240 2nd Ave Ext S, Seattle, WA 98104', 47.5990, -122.3325, 'seattle', ['pioneer square', 'seattle']),
+    makeStub('Noggins Coffee', '7902 Aurora Ave N, Seattle, WA 98103', 47.6796, -122.3462, 'seattle', ['green lake', 'seattle']),
+
+    // ============ PORTLAND ============
+    makeStub('Water Avenue Coffee', '1028 SE Water Ave, Portland, OR 97214', 45.5132, -122.6620, 'portland', ['inner southeast', 'pdx']),
+    makeStub('Coava Coffee Roasters', '1300 SE Grand Ave, Portland, OR 97214', 45.5140, -122.6587, 'portland', ['inner southeast', 'pdx']),
+    makeStub('Barista', '529 SW 3rd Ave, Portland, OR 97204', 45.5213, -122.6757, 'portland', ['downtown', 'pdx']),
+    makeStub('Extracto Coffee Roasters', '2921 NE Killingsworth St, Portland, OR 97211', 45.5603, -122.6400, 'portland', ['alberta arts', 'pdx']),
+    makeStub('Stumptown Coffee Roasters', '4525 SE Division St, Portland, OR 97206', 45.5044, -122.6333, 'portland', ['division', 'pdx']),
+    makeStub('Sterling Coffee Roasters', '417 NW 21st Ave, Portland, OR 97209', 45.5293, -122.6983, 'portland', ['nw portland', 'pearl', 'pdx']),
+
+    // ============ DENVER ============
+    makeStub('Corvus Coffee Roasters', '1740 S Broadway, Denver, CO 80210', 39.6882, -104.9879, 'denver', ['south broadway', 'denver']),
+    makeStub('Crema Coffee House', '2862 Larimer St, Denver, CO 80205', 39.7579, -104.9790, 'denver', ['rino', 'denver']),
+    makeStub('Huckleberry Roasters', '4301 Pecos St, Denver, CO 80211', 39.7794, -105.0095, 'denver', ['sunnyside', 'denver']),
+    makeStub('Novo Coffee', '1700 E 6th Ave, Denver, CO 80218', 39.7289, -104.9715, 'denver', ['cherry creek', 'denver']),
+    makeStub('Pablo\'s Coffee', '630 E 6th Ave, Denver, CO 80203', 39.7292, -104.9834, 'denver', ['capitol hill', 'denver']),
+
+    // ============ ATLANTA ============
+    makeStub('Octane Coffee', '437 Memorial Dr SE, Atlanta, GA 30312', 33.7469, -84.3699, 'atlanta', ['grant park', 'atl']),
+    makeStub('Spiller Park Coffee', '75 5th St NW, Atlanta, GA 30308', 33.7745, -84.3875, 'atlanta', ['tech square', 'midtown', 'atl']),
+    makeStub('Land of a Thousand Hills', '1000 Virginia Ave NE, Atlanta, GA 30306', 33.7708, -84.3558, 'atlanta', ['virginia highland', 'atl']),
+    makeStub('Chattahoochee Coffee Company', '1140 Tipton Dr, Atlanta, GA 30318', 33.7971, -84.4315, 'atlanta', ['westside', 'atl']),
+    makeStub('Bloom Coffee Roasters', '168 N Highland Ave NE, Atlanta, GA 30307', 33.7686, -84.3538, 'atlanta', ['inman park', 'little five points', 'atl']),
+
+    // ============ HOUSTON ============
+    makeStub('Greenway Coffee', '3321 Westheimer Rd, Houston, TX 77098', 29.7390, -95.4347, 'houston', ['river oaks', 'houston']),
+    makeStub('Blacksmith', '1018 Westheimer Rd, Houston, TX 77006', 29.7397, -95.3930, 'houston', ['montrose', 'houston']),
+    makeStub('Cavo Coffee', '3015 Richmond Ave, Houston, TX 77098', 29.7396, -95.4270, 'houston', ['upper kirby', 'houston']),
+    makeStub('Boomtown Coffee', '2103 Ella Blvd, Houston, TX 77008', 29.7895, -95.4190, 'houston', ['heights', 'houston']),
+    makeStub('Amaya Coffee', '4 Greenway Plaza, Houston, TX 77046', 29.7381, -95.4448, 'houston', ['greenway plaza', 'houston']),
+
+    // ============ PHOENIX / SCOTTSDALE ============
+    makeStub('Cartel Coffee Lab', '1 E Jefferson St, Phoenix, AZ 85004', 33.4490, -112.0726, 'phoenix', ['downtown phoenix', 'az']),
+    makeStub('Lux Central', '4402 N Central Ave, Phoenix, AZ 85012', 33.4934, -112.0737, 'phoenix', ['midtown phoenix', 'az']),
+    makeStub('Sip Coffee & Beer House', '8700 E Pinnacle Peak Rd, Scottsdale, AZ 85255', 33.7154, -111.9116, 'scottsdale', ['north scottsdale', 'az']),
+    makeStub('Press Coffee', '1 S Scottsdale Rd, Scottsdale, AZ 85281', 33.4942, -111.9261, 'scottsdale', ['old town scottsdale', 'tempe', 'az']),
+
+    // ============ WASHINGTON DC ============
+    makeStub('Compass Coffee', '1535 7th St NW, Washington, DC 20001', 38.9104, -77.0222, 'washington dc', ['shaw', 'dc']),
+    makeStub('Qualia Coffee', '3917 Georgia Ave NW, Washington, DC 20011', 38.9453, -77.0222, 'washington dc', ['petworth', 'dc']),
+    makeStub('La Colombe Coffee Roasters', '924 Blagden Alley NW, Washington, DC 20001', 38.9079, -77.0254, 'washington dc', ['shaw', 'blagden alley', 'dc']),
+    makeStub('Takoma Beverage Company', '6833 4th St NW, Washington, DC 20012', 38.9770, -77.0250, 'washington dc', ['takoma', 'dc']),
+    makeStub('Slipstream', '1333 14th St NW, Washington, DC 20005', 38.9086, -77.0322, 'washington dc', ['14th street', 'logan circle', 'dc']),
+
+    // ============ NASHVILLE ============
+    makeStub('Barista Parlor Golden Sound', '1230 4th Ave N, Nashville, TN 37208', 36.1697, -86.7834, 'nashville', ['germantown', 'tn']),
+    makeStub('Crema', '15 Hermitage Ave, Nashville, TN 37210', 36.1545, -86.7714, 'nashville', ['rolling mill hill', 'tn']),
+    makeStub('Red Bicycle Coffee', '4342 Harding Pike, Nashville, TN 37205', 36.1141, -86.8521, 'nashville', ['belle meade', 'west nashville', 'tn']),
+    makeStub('Frothy Monkey', '2509 12th Ave S, Nashville, TN 37204', 36.1202, -86.7948, 'nashville', ['12south', 'tn']),
+
+    // ============ BROOKLYN / QUEENS ============
+    makeStub('Sey Coffee', '18 Grattan St, Brooklyn, NY 11206', 40.7068, -73.9394, 'brooklyn', ['bushwick', 'nyc']),
+    makeStub('Parlor Coffee', '11 Hoyt St, Brooklyn, NY 11201', 40.6895, -73.9886, 'brooklyn', ['boerum hill', 'downtown brooklyn', 'nyc']),
+    makeStub('Hungry Ghost Coffee', '781 Fulton St, Brooklyn, NY 11217', 40.6864, -73.9771, 'brooklyn', ['fort greene', 'clinton hill', 'nyc']),
+    makeStub('Devoción', '69 Grand St, Brooklyn, NY 11249', 40.7145, -73.9590, 'brooklyn', ['williamsburg', 'nyc']),
+    makeStub('Toby\'s Estate Coffee', '125 N 6th St, Brooklyn, NY 11249', 40.7173, -73.9614, 'brooklyn', ['williamsburg', 'nyc']),
+    makeStub('Queens Crep', '82-22 Queens Blvd, Elmhurst, NY 11373', 40.7374, -73.8754, 'queens', ['elmhurst', 'nyc']),
+  ]
+
+  try {
+    const cafesRef = collection(db, CAFES_COLLECTION)
+    let count = 0
+    for (const stub of stubs) {
+      await addDoc(cafesRef, { ...stub, createdAt: serverTimestamp() })
+      count++
+      console.log(`Seeded stub ${count}/${stubs.length}: ${stub.name}`)
+    }
+    console.log('Stub cafes seeded successfully!')
+    return { success: true, count: stubs.length }
+  } catch (error) {
+    console.error('Error seeding stub cafes:', error)
     throw error
   }
 }
