@@ -14,14 +14,13 @@ export default function Discovery() {
   const [filters, setFilters] = useState({})
   const { cafes, loading, loadingMore, hasMore, loadMore } = useCafes(filters)
 
-  // The map needs every cafe, not just the loaded pages; fetch once and
-  // apply attribute filters client-side.
+  // The map needs every cafe, not just the loaded pages. Prefetch on mount
+  // (rather than on map-toggle) so markers are ready by the time the user
+  // opens the map; null = still loading.
   const [allMapCafes, setAllMapCafes] = useState(null)
   useEffect(() => {
-    if (viewMode === 'map' && allMapCafes === null) {
-      getAllCafes().then(setAllMapCafes).catch(() => setAllMapCafes([]))
-    }
-  }, [viewMode, allMapCafes])
+    getAllCafes().then(setAllMapCafes).catch(() => setAllMapCafes([]))
+  }, [])
 
   const mapCafes = useMemo(
     () => applyCafeFilters(allMapCafes || [], filters),
@@ -143,7 +142,12 @@ export default function Discovery() {
             )}
           </>
         ) : (
-          <div className="h-[calc(100vh-280px)] md:h-[calc(100vh-220px)] rounded-xl overflow-hidden shadow-lg">
+          <div className="relative h-[calc(100vh-280px)] md:h-[calc(100vh-220px)] rounded-xl overflow-hidden shadow-lg">
+            {allMapCafes === null && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 backdrop-blur-sm">
+                <Loader text="Loading cafes..." />
+              </div>
+            )}
             <MapView
               cafes={location ? sortByDistance(mapCafes, location) : mapCafes}
               userLocation={location}
