@@ -152,7 +152,10 @@ export default function MapView({ cafes, userLocation, onRequestLocation }) {
               <h3 className="font-semibold text-gray-900 mb-1">
                 {selectedCafe.name}
               </h3>
-              <Rating value={selectedCafe.averageRating || 0} size="sm" showValue />
+              {selectedCafe.totalReviews > 0
+                ? <Rating value={selectedCafe.averageRating || 0} size="sm" showValue />
+                : <p className="text-xs text-gray-400">No reviews yet</p>
+              }
               <p className="text-xs text-gray-500 mt-1">
                 Tap to view details
               </p>

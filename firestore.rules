@@ -18,7 +18,9 @@ service cloud.firestore {
       allow update: if request.auth != null
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['averageRating', 'totalReviews', 'ratingDistribution']);
-      allow delete: if false;
+      // Stub cafes (Places-seeded placeholders) may be cleaned up by
+      // signed-in users; real cafes can't be deleted from the client.
+      allow delete: if request.auth != null && resource.data.isStub == true;
     }
 
     // Reviews collection

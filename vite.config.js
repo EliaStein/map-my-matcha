@@ -8,7 +8,14 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    host: true
+    host: true,
+    proxy: {
+      '/places-proxy': {
+        target: 'https://maps.googleapis.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/places-proxy/, '')
+      }
+    }
   },
   build: {
     rollupOptions: {

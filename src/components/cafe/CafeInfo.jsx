@@ -32,12 +32,14 @@ export default function CafeInfo({ cafe }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Rating value={cafe.averageRating || 0} showValue />
-          <span className="text-sm text-gray-500">
-            ({cafe.totalReviews || 0} reviews)
-          </span>
-        </div>
+        {cafe.totalReviews > 0 && (
+          <div className="flex items-center gap-3">
+            <Rating value={cafe.averageRating || 0} showValue />
+            <span className="text-sm text-gray-500">
+              ({cafe.totalReviews} reviews)
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Description */}

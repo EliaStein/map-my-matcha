@@ -1,16 +1,32 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Map, List, MapPin, Plus } from 'lucide-react'
-import { SearchBar } from '../components/common'
+import { SearchBar, Loader } from '../components/common'
 import { Header } from '../components/layout'
 import { CafeList, CafeFilters } from '../components/cafe'
 import MapView from '../components/map/MapView'
 import { useCafes, useGeolocation, useSearch, sortByDistance, formatDistance, calculateDistance } from '../hooks'
+import { getAllCafes } from '../services/cafes'
+import { applyCafeFilters } from '../utils/cafeFilters'
 
 export default function Discovery() {
   const [viewMode, setViewMode] = useState('list')
   const [filters, setFilters] = useState({})
   const { cafes, loading, loadingMore, hasMore, loadMore } = useCafes(filters)
+
+  // The map needs every cafe, not just the loaded pages; fetch once and
+  // apply attribute filters client-side.
+  const [allMapCafes, setAllMapCafes] = useState(null)
+  useEffect(() => {
+    if (viewMode === 'map' && allMapCafes === null) {
+      getAllCafes().then(setAllMapCafes).catch(() => setAllMapCafes([]))
+    }
+  }, [viewMode, allMapCafes])
+
+  const mapCafes = useMemo(
+    () => applyCafeFilters(allMapCafes || [], filters),
+    [allMapCafes, filters]
+  )
   const { location, requestLocation, loading: locationLoading } = useGeolocation()
   const { searchTerm, setSearchTerm, filteredItems } = useSearch(
     cafes,
@@ -113,13 +129,14 @@ export default function Discovery() {
               />
             </div>
 
-            {!loading && !searchTerm && hasMore && (
-              <div className="flex justify-center mt-6">
+            {!loading && hasMore && !searchTerm && (
+              <div className="mt-8 flex justify-center">
                 <button
                   onClick={loadMore}
                   disabled={loadingMore}
-                  className="px-6 py-3 text-sm font-medium text-matcha-dark bg-matcha-light rounded-full hover:bg-matcha-medium/30 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-matcha-dark text-matcha-dark font-medium rounded-full hover:bg-matcha-light transition-colors disabled:opacity-50"
                 >
+                  {loadingMore ? <Loader size="sm" /> : null}
                   {loadingMore ? 'Loading...' : 'Load more cafes'}
                 </button>
               </div>
@@ -128,7 +145,7 @@ export default function Discovery() {
         ) : (
           <div className="h-[calc(100vh-280px)] md:h-[calc(100vh-220px)] rounded-xl overflow-hidden shadow-lg">
             <MapView
-              cafes={sortedCafes}
+              cafes={location ? sortByDistance(mapCafes, location) : mapCafes}
               userLocation={location}
               onRequestLocation={requestLocation}
             />
