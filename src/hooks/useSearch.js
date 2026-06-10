@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 
 export function useSearch(items, searchFields = ['name']) {
   const [searchTerm, setSearchTerm] = useState('')

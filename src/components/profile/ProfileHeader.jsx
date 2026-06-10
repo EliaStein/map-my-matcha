@@ -1,10 +1,9 @@
-import { useState, useRef } from 'react'
+import { useRef } from 'react'
 import { Camera, User } from 'lucide-react'
 import { Loader } from '../common'
 
 export default function ProfileHeader({
   user,
-  profile,
   onPhotoChange,
   loading = false
 }) {

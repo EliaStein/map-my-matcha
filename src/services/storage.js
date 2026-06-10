@@ -18,9 +18,11 @@ export async function uploadImage(file, path) {
   }
 }
 
-export async function uploadReviewImage(reviewId, file, index = 0) {
+// Paths are keyed by the uploader's uid so storage rules can verify
+// that users only write into their own folder.
+export async function uploadReviewImage(userId, file, index = 0) {
   const timestamp = Date.now()
-  const path = `reviews/${reviewId}/${timestamp}_${index}.jpg`
+  const path = `reviews/${userId}/${timestamp}_${index}.jpg`
   return uploadImage(file, path)
 }
 

@@ -21,9 +21,12 @@ export function AuthProvider({ children }) {
       setUser(firebaseUser)
 
       if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
-        if (userDoc.exists()) {
-          setUserProfile(userDoc.data())
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
+          setUserProfile(userDoc.exists() ? userDoc.data() : null)
+        } catch (error) {
+          console.error('Error loading user profile:', error)
+          setUserProfile(null)
         }
       } else {
         setUserProfile(null)

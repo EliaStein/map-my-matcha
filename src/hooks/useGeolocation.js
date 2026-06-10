@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 
 export function useGeolocation() {
   const [location, setLocation] = useState(null)

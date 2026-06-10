@@ -1,19 +1,23 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users collection
+    // Users collection - profiles are private to their owner
     match /users/{userId} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null && request.auth.uid == userId;
       allow update: if request.auth != null && request.auth.uid == userId;
       allow delete: if false;
     }
 
-    // Cafes collection - anyone can read, anyone can create (guest mode)
+    // Cafes collection - anyone can read, signed-in users can add.
+    // Updates may only touch the denormalized rating stats, which are
+    // written by the review transaction in services/reviews.js.
     match /cafes/{cafeId} {
       allow read: if true;
-      allow create: if true;
-      allow update: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['averageRating', 'totalReviews', 'ratingDistribution']);
       allow delete: if false;
     }
 
@@ -21,7 +25,10 @@ service cloud.firestore {
     match /reviews/{reviewId} {
       allow read: if true;
       allow create: if request.auth != null
-        && request.resource.data.userId == request.auth.uid;
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.rating is number
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5;
       allow update: if request.auth != null
         && resource.data.userId == request.auth.uid;
       allow delete: if request.auth != null

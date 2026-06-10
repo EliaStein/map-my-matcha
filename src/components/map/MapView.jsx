@@ -50,7 +50,7 @@ const mapOptions = {
 
 export default function MapView({ cafes, userLocation, onRequestLocation }) {
   const navigate = useNavigate()
-  const [map, setMap] = useState(null)
+  const [, setMap] = useState(null)
   const [selectedCafe, setSelectedCafe] = useState(null)
 
   const { isLoaded, loadError } = useJsApiLoader({

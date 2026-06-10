@@ -151,14 +151,18 @@ export default function App() {
         }
       />
 
-      {/* Add Cafe - accessible to guests */}
+      {/* Add Cafe - requires sign-in (Firestore rules require auth to create cafes) */}
       <Route
         path="/add-cafe"
-        element={<AddCafe />}
+        element={
+          <ProtectedRoute>
+            <AddCafe />
+          </ProtectedRoute>
+        }
       />
 
-      {/* Admin/Dev routes */}
-      <Route path="/seed" element={<Seed />} />
+      {/* Dev-only routes - stripped from production builds */}
+      {import.meta.env.DEV && <Route path="/seed" element={<Seed />} />}
 
       {/* Catch all */}
       <Route path="*" element={<Navigate to="/" replace />} />

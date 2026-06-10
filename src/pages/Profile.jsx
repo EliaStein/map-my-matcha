@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Edit2, LogOut, ChevronRight, Tag, Leaf } from 'lucide-react'
 import { Header } from '../components/layout'
-import { Button, Card, Loader } from '../components/common'
+import { Card, Loader } from '../components/common'
 import { ProfileHeader, ProfileStats, EditProfileForm } from '../components/profile'
 import { ReviewCard } from '../components/review'
 import { useAuth } from '../context/AuthContext'
@@ -50,7 +50,7 @@ export default function Profile() {
 
   // Get active preferences
   const activePreferences = Object.entries(userProfile?.preferences || {})
-    .filter(([key, value]) => value === true)
+    .filter(([, value]) => value === true)
     .map(([key]) => key)
 
   return (

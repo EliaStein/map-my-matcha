@@ -7,18 +7,23 @@ service firebase.storage {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Review photos
-    match /reviews/{reviewId}/{fileName} {
+    // Review photos - publicly readable, only the author can write
+    // into their own folder (paths are reviews/{uid}/{file})
+    match /reviews/{allPaths=**} {
       allow read: if true;
+    }
+    match /reviews/{userId}/{fileName} {
       allow write: if request.auth != null
+        && request.auth.uid == userId
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
-    // Cafe photos (user submitted) - guests can upload
-    match /cafes/{path=**} {
+    // Cafe photos (user submitted) - signed-in users only
+    match /cafes/{allPaths=**} {
       allow read: if true;
-      allow write: if request.resource.size < 5 * 1024 * 1024
+      allow write: if request.auth != null
+        && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
   }

@@ -1,9 +1,26 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useJsApiLoader } from '@react-google-maps/api'
 import { ChevronLeft, MapPin, Plus, X, Camera, Leaf } from 'lucide-react'
 import { Button, Input, Tag } from '../components/common'
 import { addCafe } from '../services/cafes'
 import { uploadImage, compressImage } from '../services/storage'
+
+// Resolve the typed address to coordinates via the Maps JS Geocoder.
+// Returns null (cafe still saves, just won't appear on the map) if the
+// API isn't loaded or the address can't be resolved.
+async function geocodeAddress(address) {
+  if (!window.google?.maps?.Geocoder) return null
+  try {
+    const geocoder = new window.google.maps.Geocoder()
+    const { results } = await geocoder.geocode({ address })
+    const loc = results?.[0]?.geometry?.location
+    return loc ? { lat: loc.lat(), lng: loc.lng() } : null
+  } catch (err) {
+    console.error('Geocoding failed:', err)
+    return null
+  }
+}
 
 const FEATURE_OPTIONS = [
   { id: 'isOrganic', label: 'Organic', emoji: '🌱' },
@@ -24,6 +41,11 @@ export default function AddCafe() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Load the Maps JS API so geocodeAddress works on submit
+  useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+  })
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -87,11 +109,13 @@ export default function AddCafe() {
         coverImageUrl = await uploadImage(coverImage, path)
       }
 
+      const location = await geocodeAddress(address.trim())
+
       const cafeData = {
         name: name.trim(),
         description: description.trim(),
         address: address.trim(),
-        location: null, // Could integrate with geocoding API
+        location,
         coverImage: coverImageUrl || 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&q=80',
         images: [],
         priceLevel,

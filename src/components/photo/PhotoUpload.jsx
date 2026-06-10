@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react'
-import { Camera, Upload, X } from 'lucide-react'
-import { Button } from '../common'
+import { Camera, X } from 'lucide-react'
 import { compressImage } from '../../services/storage'
 
 export default function PhotoUpload({

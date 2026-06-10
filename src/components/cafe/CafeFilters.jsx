@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Filter, X, Check } from 'lucide-react'
-import { Button, Tag } from '../common'
+import { Tag } from '../common'
 
 const FILTER_OPTIONS = [
   { id: 'isOrganic', label: 'Organic', emoji: '🌱' },

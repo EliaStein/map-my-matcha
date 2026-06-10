@@ -10,7 +10,7 @@ import { useCafes, useGeolocation, useSearch, sortByDistance, formatDistance, ca
 export default function Discovery() {
   const [viewMode, setViewMode] = useState('list')
   const [filters, setFilters] = useState({})
-  const { cafes, loading, error } = useCafes(filters)
+  const { cafes, loading, loadingMore, hasMore, loadMore } = useCafes(filters)
   const { location, requestLocation, loading: locationLoading } = useGeolocation()
   const { searchTerm, setSearchTerm, filteredItems } = useSearch(
     cafes,
@@ -103,14 +103,28 @@ export default function Discovery() {
 
         {/* Content */}
         {viewMode === 'list' ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-            <CafeList
-              cafes={sortedCafes}
-              loading={loading}
-              emptyMessage={searchTerm ? 'No cafes match your search' : 'No cafes found'}
-              getDistance={getDistance}
-            />
-          </div>
+          <>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+              <CafeList
+                cafes={sortedCafes}
+                loading={loading}
+                emptyMessage={searchTerm ? 'No cafes match your search' : 'No cafes found'}
+                getDistance={getDistance}
+              />
+            </div>
+
+            {!loading && !searchTerm && hasMore && (
+              <div className="flex justify-center mt-6">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="px-6 py-3 text-sm font-medium text-matcha-dark bg-matcha-light rounded-full hover:bg-matcha-medium/30 transition-colors disabled:opacity-50"
+                >
+                  {loadingMore ? 'Loading...' : 'Load more cafes'}
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="h-[calc(100vh-280px)] md:h-[calc(100vh-220px)] rounded-xl overflow-hidden shadow-lg">
             <MapView

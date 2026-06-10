@@ -7,14 +7,14 @@ import {
   where,
   orderBy,
   limit,
-  addDoc,
-  deleteDoc,
+  runTransaction,
   serverTimestamp
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
-import { updateCafeRating } from './cafes'
+import { addRatingToStats, removeRatingFromStats } from '../utils/rating'
 
 const REVIEWS_COLLECTION = 'reviews'
+const CAFES_COLLECTION = 'cafes'
 
 export async function getReviewsByCafe(cafeId, limitCount = 50) {
   try {
@@ -73,13 +73,22 @@ export async function createReview({ cafeId, userId, userDisplayName, userPhotoU
       createdAt: serverTimestamp()
     }
 
-    const docRef = await addDoc(collection(db, REVIEWS_COLLECTION), reviewData)
+    // Create the review and update the cafe's denormalized rating stats
+    // in one transaction so concurrent reviews can't clobber the counts.
+    const reviewRef = doc(collection(db, REVIEWS_COLLECTION))
+    const cafeRef = doc(db, CAFES_COLLECTION, cafeId)
 
-    // Update cafe rating
-    await updateCafeRating(cafeId, rating)
+    await runTransaction(db, async (tx) => {
+      const cafeSnap = await tx.get(cafeRef)
+      if (!cafeSnap.exists()) {
+        throw new Error('Cafe not found')
+      }
+      tx.set(reviewRef, reviewData)
+      tx.update(cafeRef, addRatingToStats(cafeSnap.data(), rating))
+    })
 
     return {
-      id: docRef.id,
+      id: reviewRef.id,
       ...reviewData,
       createdAt: new Date()
     }
@@ -91,7 +100,23 @@ export async function createReview({ cafeId, userId, userDisplayName, userPhotoU
 
 export async function deleteReview(reviewId) {
   try {
-    await deleteDoc(doc(db, REVIEWS_COLLECTION, reviewId))
+    const reviewRef = doc(db, REVIEWS_COLLECTION, reviewId)
+
+    await runTransaction(db, async (tx) => {
+      const reviewSnap = await tx.get(reviewRef)
+      if (!reviewSnap.exists()) {
+        return
+      }
+
+      const { cafeId, rating } = reviewSnap.data()
+      const cafeRef = doc(db, CAFES_COLLECTION, cafeId)
+      const cafeSnap = await tx.get(cafeRef)
+
+      tx.delete(reviewRef)
+      if (cafeSnap.exists()) {
+        tx.update(cafeRef, removeRatingFromStats(cafeSnap.data(), rating))
+      }
+    })
   } catch (error) {
     console.error('Error deleting review:', error)
     throw error

@@ -27,7 +27,7 @@ export default function CafeProfile() {
           text: `Check out ${cafe?.name} on MapMyMatcha!`,
           url: window.location.href
         })
-      } catch (err) {
+      } catch {
         // User cancelled or error
       }
     }

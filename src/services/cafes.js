@@ -4,17 +4,19 @@ import {
   getDoc,
   getDocs,
   query,
-  where,
   orderBy,
   limit,
+  startAfter,
   addDoc,
-  updateDoc,
   deleteDoc,
   serverTimestamp
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { applyCafeFilters } from '../utils/cafeFilters'
 
 const CAFES_COLLECTION = 'cafes'
+const DEFAULT_PAGE_SIZE = 24
+const MAX_FETCH = 200
 
 export async function addCafe(cafeData) {
   try {
@@ -38,42 +40,51 @@ export async function addCafe(cafeData) {
   }
 }
 
+// Attribute filters are applied client-side (see utils/cafeFilters.js):
+// combining server-side where() clauses with the rating sort would need a
+// composite index per filter combination.
 export async function getCafes(filters = {}) {
   try {
-    let q = collection(db, CAFES_COLLECTION)
-    const constraints = []
-
-    if (filters.isOrganic) {
-      constraints.push(where('isOrganic', '==', true))
-    }
-    if (filters.isCeremonial) {
-      constraints.push(where('isCeremonial', '==', true))
-    }
-    if (filters.hasWifi) {
-      constraints.push(where('hasWifi', '==', true))
-    }
-    if (filters.hasNonDairyMilk) {
-      constraints.push(where('hasNonDairyMilk', '==', true))
-    }
-    if (filters.maxPrice) {
-      constraints.push(where('priceLevel', '<=', filters.maxPrice))
-    }
-
-    constraints.push(orderBy('averageRating', 'desc'))
-
-    if (filters.limit) {
-      constraints.push(limit(filters.limit))
-    }
-
-    q = query(q, ...constraints)
+    const q = query(
+      collection(db, CAFES_COLLECTION),
+      orderBy('averageRating', 'desc'),
+      limit(filters.limit || MAX_FETCH)
+    )
     const snapshot = await getDocs(q)
 
-    return snapshot.docs.map(doc => ({
+    const cafes = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }))
+
+    return applyCafeFilters(cafes, filters)
   } catch (error) {
     console.error('Error fetching cafes:', error)
+    throw error
+  }
+}
+
+// Cursor-paginated variant. `cursor` is the snapshot returned by the
+// previous call; filters are applied client-side, so a page can come back
+// shorter than pageSize while hasMore is still true.
+export async function getCafesPage({ filters = {}, pageSize = DEFAULT_PAGE_SIZE, cursor = null } = {}) {
+  try {
+    const constraints = [orderBy('averageRating', 'desc')]
+    if (cursor) {
+      constraints.push(startAfter(cursor))
+    }
+    constraints.push(limit(pageSize))
+
+    const snapshot = await getDocs(query(collection(db, CAFES_COLLECTION), ...constraints))
+    const docs = snapshot.docs
+
+    return {
+      cafes: applyCafeFilters(docs.map(d => ({ id: d.id, ...d.data() })), filters),
+      cursor: docs.length > 0 ? docs[docs.length - 1] : null,
+      hasMore: docs.length === pageSize
+    }
+  } catch (error) {
+    console.error('Error fetching cafes page:', error)
     throw error
   }
 }
@@ -112,34 +123,6 @@ export async function searchCafes(searchTerm) {
     })
   } catch (error) {
     console.error('Error searching cafes:', error)
-    throw error
-  }
-}
-
-export async function updateCafeRating(cafeId, newRating) {
-  try {
-    const cafeRef = doc(db, CAFES_COLLECTION, cafeId)
-    const cafeSnap = await getDoc(cafeRef)
-
-    if (!cafeSnap.exists()) {
-      throw new Error('Cafe not found')
-    }
-
-    const cafe = cafeSnap.data()
-    const currentTotal = (cafe.averageRating || 0) * (cafe.totalReviews || 0)
-    const newTotalReviews = (cafe.totalReviews || 0) + 1
-    const newAverage = (currentTotal + newRating) / newTotalReviews
-
-    const ratingDistribution = cafe.ratingDistribution || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
-    ratingDistribution[newRating] = (ratingDistribution[newRating] || 0) + 1
-
-    await updateDoc(cafeRef, {
-      averageRating: Math.round(newAverage * 10) / 10,
-      totalReviews: newTotalReviews,
-      ratingDistribution
-    })
-  } catch (error) {
-    console.error('Error updating cafe rating:', error)
     throw error
   }
 }

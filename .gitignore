@@ -30,6 +30,12 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
+# Local docs / decks
+*.pptx
+
+# Claude Code local state
+.claude/
+
 # Firebase
 .firebase
 firebase-debug.log

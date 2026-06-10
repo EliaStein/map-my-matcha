@@ -20,7 +20,7 @@ export default function EditProfileForm({
 
     try {
       await onSave(displayName.trim())
-    } catch (err) {
+    } catch {
       setError('Failed to update profile')
     }
   }

@@ -15,22 +15,6 @@
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "cafes",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "isOrganic", "order": "ASCENDING" },
-        { "fieldPath": "averageRating", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "cafes",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "isCeremonial", "order": "ASCENDING" },
-        { "fieldPath": "averageRating", "order": "DESCENDING" }
-      ]
     }
   ],
   "fieldOverrides": []

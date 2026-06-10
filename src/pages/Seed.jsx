@@ -86,7 +86,7 @@ export default function Seed() {
         )}
 
         <p className="mt-6 text-xs text-gray-400">
-          "Clear & Re-seed" removes all existing cafes and adds fresh data with updated images.
+          &quot;Clear &amp; Re-seed&quot; removes all existing cafes and adds fresh data with updated images.
         </p>
       </div>
     </div>

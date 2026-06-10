@@ -1,4 +1,4 @@
-import { Star, Heart, MessageSquare } from 'lucide-react'
+import { Heart, MessageSquare } from 'lucide-react'
 
 export default function ProfileStats({ reviewCount = 0, favoriteCount = 0 }) {
   const stats = [

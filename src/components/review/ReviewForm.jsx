@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Star, Camera, X } from 'lucide-react'
-import { Button, Input, Rating } from '../common'
+import { Button } from '../common'
 import { useAuth } from '../../context/AuthContext'
 import { uploadReviewImage, compressImage } from '../../services/storage'
 
-export default function ReviewForm({ cafeId, onSubmit, onCancel }) {
+export default function ReviewForm({ onSubmit, onCancel }) {
   const { user } = useAuth()
   const [rating, setRating] = useState(0)
   const [text, setText] = useState('')
@@ -45,13 +45,10 @@ export default function ReviewForm({ cafeId, onSubmit, onCancel }) {
     setError('')
 
     try {
-      // Generate a temporary review ID for image paths
-      const tempReviewId = `${user.uid}_${Date.now()}`
-
-      // Upload images
+      // Upload images into the user's own folder (enforced by storage rules)
       const imageUrls = []
       for (let i = 0; i < images.length; i++) {
-        const url = await uploadReviewImage(tempReviewId, images[i].file, i)
+        const url = await uploadReviewImage(user.uid, images[i].file, i)
         imageUrls.push(url)
       }
 

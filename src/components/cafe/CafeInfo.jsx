@@ -1,4 +1,4 @@
-import { MapPin, Clock, Phone, Globe, DollarSign, Navigation } from 'lucide-react'
+import { MapPin, DollarSign, Navigation } from 'lucide-react'
 import { Rating, Tag, Button } from '../common'
 
 export default function CafeInfo({ cafe }) {
