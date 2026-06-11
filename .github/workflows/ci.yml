@@ -12,7 +12,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 24 ships npm 11, matching local dev - npm 10 and 11
+          # write incompatible lockfiles for optional platform deps
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run lint
