@@ -12,6 +12,8 @@ import Favorites from './pages/Favorites'
 import Profile from './pages/Profile'
 import Seed from './pages/Seed'
 import AddCafe from './pages/AddCafe'
+import Terms from './pages/Terms'
+import Privacy from './pages/Privacy'
 import MobileLayout from './components/layout/MobileLayout'
 import Loader from './components/common/Loader'
 
@@ -175,6 +177,10 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+
+      {/* Legal pages - public */}
+      <Route path="/terms" element={<Terms />} />
+      <Route path="/privacy" element={<Privacy />} />
 
       {/* Dev-only routes - stripped from production builds */}
       {import.meta.env.DEV && <Route path="/seed" element={<Seed />} />}

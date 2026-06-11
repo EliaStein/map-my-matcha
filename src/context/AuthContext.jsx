@@ -4,10 +4,14 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
-  updateProfile
+  updateProfile,
+  deleteUser,
+  EmailAuthProvider,
+  reauthenticateWithCredential
 } from 'firebase/auth'
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../config/firebase'
+import { deleteAccountData } from '../services/users'
 
 const AuthContext = createContext(null)
 
@@ -75,6 +79,23 @@ export function AuthProvider({ children }) {
     setUserProfile(null)
   }
 
+  // App Store guideline 5.1.1: accounts must be deletable in-app.
+  // Reauthenticates first (Firebase requires a recent login), removes the
+  // user's data, then the auth record itself.
+  const deleteAccount = async (password) => {
+    const currentUser = auth.currentUser
+    if (!currentUser?.email) {
+      throw new Error('No signed-in user')
+    }
+
+    const credential = EmailAuthProvider.credential(currentUser.email, password)
+    await reauthenticateWithCredential(currentUser, credential)
+
+    await deleteAccountData(currentUser.uid)
+    await deleteUser(currentUser)
+    setUserProfile(null)
+  }
+
   const refreshUserProfile = async () => {
     if (user) {
       const userDoc = await getDoc(doc(db, 'users', user.uid))
@@ -91,6 +112,7 @@ export function AuthProvider({ children }) {
     signUp,
     logIn,
     logOut,
+    deleteAccount,
     refreshUserProfile,
     isAuthenticated: !!user,
     hasCompletedOnboarding: userProfile?.hasCompletedOnboarding ?? false

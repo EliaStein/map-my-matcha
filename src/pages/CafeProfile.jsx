@@ -1,22 +1,30 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ChevronLeft, Heart, Share2, Plus, LogIn } from 'lucide-react'
-import { Button, Loader } from '../components/common'
+import { ChevronLeft, Heart, Share2, Plus, LogIn, Flag } from 'lucide-react'
+import { Button, Loader, ReportDialog } from '../components/common'
 import { CafeInfo, CafePlaceholderImage } from '../components/cafe'
 import { PhotoGallery } from '../components/photo'
 import { ReviewList, ReviewForm } from '../components/review'
 import { useCafe, useReviews, useFavorites } from '../hooks'
 import { useAuth } from '../context/AuthContext'
 import { track } from '../services/analytics'
+import { submitReport } from '../services/reports'
+import { blockUser } from '../services/users'
 
 export default function CafeProfile() {
   const { cafeId } = useParams()
   const navigate = useNavigate()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user, userProfile, refreshUserProfile } = useAuth()
   const { cafe, loading: cafeLoading, error: cafeError } = useCafe(cafeId)
   const { reviews, loading: reviewsLoading, addReview, refetch: refetchReviews } = useReviews(cafeId)
   const { isFavorite, toggleFavorite } = useFavorites()
   const [showReviewForm, setShowReviewForm] = useState(false)
+  // null = closed, { type: 'cafe' } or { type: 'review', review } = open
+  const [reportTarget, setReportTarget] = useState(null)
+
+  // Hide content from users the viewer has blocked (App Store UGC rule)
+  const blockedUsers = userProfile?.blockedUsers || []
+  const visibleReviews = reviews.filter(r => !blockedUsers.includes(r.userId))
 
   const favorited = isAuthenticated && isFavorite(cafeId)
 
@@ -60,6 +68,31 @@ export default function CafeProfile() {
     await addReview(reviewData)
     setShowReviewForm(false)
     refetchReviews()
+  }
+
+  const handleReportClick = (target) => {
+    if (!isAuthenticated) {
+      navigate('/login')
+      return
+    }
+    setReportTarget(target)
+  }
+
+  const handleReportSubmit = async (reason) => {
+    await submitReport({
+      targetType: reportTarget.type,
+      targetId: reportTarget.type === 'review' ? reportTarget.review.id : cafeId,
+      cafeId,
+      reason,
+      reporterId: user.uid
+    })
+    track('report_submitted', { target_type: reportTarget.type })
+  }
+
+  const handleBlockUser = async () => {
+    await blockUser(user.uid, reportTarget.review.userId)
+    await refreshUserProfile()
+    track('user_blocked')
   }
 
   if (cafeLoading) {
@@ -167,11 +200,22 @@ export default function CafeProfile() {
               )}
 
               <ReviewList
-                reviews={reviews}
+                reviews={visibleReviews}
                 loading={reviewsLoading}
                 emptyMessage="Be the first to review this cafe!"
+                onReport={(review) => handleReportClick({ type: 'review', review })}
+                viewerId={user?.uid}
               />
             </div>
+
+            {/* Report listing (App Store UGC requirement) */}
+            <button
+              onClick={() => handleReportClick({ type: 'cafe' })}
+              className="mt-6 flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-400 transition-colors"
+            >
+              <Flag className="w-3.5 h-3.5" />
+              Report this listing
+            </button>
           </div>
 
           {/* Sidebar for desktop */}
@@ -226,6 +270,14 @@ export default function CafeProfile() {
           </div>
         </div>
       </div>
+
+      <ReportDialog
+        open={reportTarget !== null}
+        onClose={() => setReportTarget(null)}
+        targetLabel={reportTarget?.type === 'review' ? 'Review' : 'Listing'}
+        onSubmit={handleReportSubmit}
+        onBlock={reportTarget?.type === 'review' ? handleBlockUser : undefined}
+      />
     </div>
   )
 }

@@ -1,7 +1,7 @@
-import { User } from 'lucide-react'
+import { User, Flag } from 'lucide-react'
 import { Rating } from '../common'
 
-export default function ReviewCard({ review }) {
+export default function ReviewCard({ review, onReport }) {
   const formatDate = (date) => {
     if (!date) return ''
     const d = date instanceof Date ? date : new Date(date)
@@ -32,8 +32,19 @@ export default function ReviewCard({ review }) {
             <span className="font-medium text-gray-900 truncate">
               {review.userDisplayName || 'Anonymous'}
             </span>
-            <span className="text-xs text-gray-400 flex-shrink-0">
-              {formatDate(review.createdAt)}
+            <span className="flex items-center gap-1 flex-shrink-0">
+              <span className="text-xs text-gray-400">
+                {formatDate(review.createdAt)}
+              </span>
+              {onReport && (
+                <button
+                  onClick={() => onReport(review)}
+                  className="p-1 rounded-full text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+                  title="Report review"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                </button>
+              )}
             </span>
           </div>
           <Rating value={review.rating} size="sm" />

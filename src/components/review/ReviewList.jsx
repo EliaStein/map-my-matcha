@@ -2,7 +2,7 @@ import ReviewCard from './ReviewCard'
 import { Loader } from '../common'
 import { MessageSquare } from 'lucide-react'
 
-export default function ReviewList({ reviews, loading, emptyMessage = 'No reviews yet' }) {
+export default function ReviewList({ reviews, loading, emptyMessage = 'No reviews yet', onReport, viewerId }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -25,7 +25,11 @@ export default function ReviewList({ reviews, loading, emptyMessage = 'No review
   return (
     <div className="space-y-3">
       {reviews.map((review) => (
-        <ReviewCard key={review.id} review={review} />
+        <ReviewCard
+          key={review.id}
+          review={review}
+          onReport={onReport && review.userId !== viewerId ? onReport : undefined}
+        />
       ))}
     </div>
   )

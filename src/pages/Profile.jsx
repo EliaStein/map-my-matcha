@@ -1,22 +1,45 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Edit2, LogOut, ChevronRight, Tag, Leaf } from 'lucide-react'
+import { useNavigate, Link } from 'react-router-dom'
+import { Edit2, LogOut, ChevronRight, Tag, Leaf, Trash2 } from 'lucide-react'
 import { Header } from '../components/layout'
-import { Card, Loader } from '../components/common'
+import { Card, Loader, Button, Input, Modal } from '../components/common'
 import { ProfileHeader, ProfileStats, EditProfileForm } from '../components/profile'
 import { ReviewCard } from '../components/review'
 import { useAuth } from '../context/AuthContext'
 import { useUserProfile, useUserReviews, useFavorites } from '../hooks'
 import { compressImage } from '../services/storage'
+import { track } from '../services/analytics'
 
 export default function Profile() {
   const navigate = useNavigate()
-  const { user, logOut, userProfile } = useAuth()
+  const { user, logOut, userProfile, deleteAccount } = useAuth()
   const { updateDisplayName, updateProfilePhoto, loading } = useUserProfile()
   const { reviews, loading: reviewsLoading } = useUserReviews(user?.uid)
   const { favorites } = useFavorites()
   const [isEditing, setIsEditing] = useState(false)
   const [photoLoading, setPhotoLoading] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await deleteAccount(deletePassword)
+      track('account_deleted')
+      navigate('/', { replace: true })
+    } catch (error) {
+      if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        setDeleteError('Incorrect password')
+      } else {
+        console.error('Error deleting account:', error)
+        setDeleteError('Failed to delete account. Please try again.')
+      }
+      setDeleting(false)
+    }
+  }
 
   const handlePhotoChange = async (file) => {
     setPhotoLoading(true)
@@ -174,9 +197,66 @@ export default function Profile() {
                 <span className="font-medium">Log Out</span>
               </button>
             </Card>
+
+            {/* Legal + account deletion */}
+            <div className="mt-6 flex items-center justify-center gap-4 text-xs text-gray-400">
+              <Link to="/terms" className="hover:text-matcha-dark">Terms of Service</Link>
+              <span>·</span>
+              <Link to="/privacy" className="hover:text-matcha-dark">Privacy Policy</Link>
+              <span>·</span>
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="hover:text-red-500"
+              >
+                Delete Account
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      <Modal
+        open={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false)
+          setDeletePassword('')
+          setDeleteError('')
+        }}
+        title="Delete Account"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            This permanently deletes your account, including your profile,
+            all your reviews, and uploaded photos. This cannot be undone.
+          </p>
+
+          {deleteError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+              {deleteError}
+            </div>
+          )}
+
+          <Input
+            label="Confirm your password"
+            type="password"
+            value={deletePassword}
+            onChange={(e) => setDeletePassword(e.target.value)}
+            placeholder="Enter your password"
+            autoComplete="current-password"
+          />
+
+          <Button
+            fullWidth
+            onClick={handleDeleteAccount}
+            loading={deleting}
+            disabled={!deletePassword}
+            className="!bg-red-500 hover:!bg-red-600"
+          >
+            <Trash2 className="w-4 h-4" />
+            Permanently Delete My Account
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }
