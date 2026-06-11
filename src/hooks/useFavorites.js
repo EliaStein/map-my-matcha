@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { addFavorite, removeFavorite } from '../services/users'
+import { track } from '../services/analytics'
 
 export function useFavorites() {
   const { user, userProfile, refreshUserProfile } = useAuth()
@@ -23,9 +24,11 @@ export function useFavorites() {
       if (isFavorite(cafeId)) {
         await removeFavorite(user.uid, cafeId)
         setFavorites(prev => prev.filter(id => id !== cafeId))
+        track('favorite_toggled', { cafe_id: cafeId, favorited: false })
       } else {
         await addFavorite(user.uid, cafeId)
         setFavorites(prev => [...prev, cafeId])
+        track('favorite_toggled', { cafe_id: cafeId, favorited: true })
       }
       await refreshUserProfile()
     } catch (error) {

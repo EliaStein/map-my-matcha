@@ -8,6 +8,7 @@ import MapView from '../components/map/MapView'
 import { useCafes, useGeolocation, useSearch, sortByDistance, formatDistance, calculateDistance } from '../hooks'
 import { getAllCafes } from '../services/cafes'
 import { applyCafeFilters } from '../utils/cafeFilters'
+import { track } from '../services/analytics'
 
 export default function Discovery() {
   const [viewMode, setViewMode] = useState('list')
@@ -31,6 +32,14 @@ export default function Discovery() {
     cafes,
     ['name', 'address', 'tags', 'searchTerms']
   )
+
+  // Report searches after the user pauses typing
+  useEffect(() => {
+    const term = searchTerm.trim()
+    if (!term) return
+    const timer = setTimeout(() => track('search', { search_term: term }), 1500)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
   // Sort by distance if we have user location
   const sortedCafes = useMemo(() => {
@@ -63,7 +72,10 @@ export default function Discovery() {
         title="Discover Matcha"
         rightAction={
           <button
-            onClick={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}
+            onClick={() => {
+              if (viewMode === 'list') track('map_opened')
+              setViewMode(viewMode === 'list' ? 'map' : 'list')
+            }}
             className="p-2 rounded-full hover:bg-gray-100 transition-colors"
             title={viewMode === 'list' ? 'Show map' : 'Show list'}
           >

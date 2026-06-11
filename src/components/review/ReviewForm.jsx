@@ -3,6 +3,7 @@ import { Star, Camera, X } from 'lucide-react'
 import { Button } from '../common'
 import { useAuth } from '../../context/AuthContext'
 import { uploadReviewImage, compressImage } from '../../services/storage'
+import { track } from '../../services/analytics'
 
 export default function ReviewForm({ onSubmit, onCancel }) {
   const { user } = useAuth()
@@ -60,6 +61,8 @@ export default function ReviewForm({ onSubmit, onCancel }) {
         text: text.trim(),
         images: imageUrls
       })
+
+      track('review_submitted', { rating, has_photos: images.length > 0 })
 
       // Reset form
       setRating(0)

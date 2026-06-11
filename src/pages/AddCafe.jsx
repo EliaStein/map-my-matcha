@@ -5,6 +5,7 @@ import { ChevronLeft, MapPin, Plus, X, Camera, Leaf } from 'lucide-react'
 import { Button, Input, Tag } from '../components/common'
 import { addCafe } from '../services/cafes'
 import { uploadImage, compressImage } from '../services/storage'
+import { track } from '../services/analytics'
 
 // Resolve the typed address to coordinates via the Maps JS Geocoder.
 // Returns null (cafe still saves, just won't appear on the map) if the
@@ -128,6 +129,7 @@ export default function AddCafe() {
       }
 
       const newCafe = await addCafe(cafeData)
+      track('cafe_added', { cafe_name: cafeData.name, geocoded: location !== null })
       navigate(`/cafe/${newCafe.id}`)
     } catch (err) {
       console.error('Error adding cafe:', err)

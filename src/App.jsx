@@ -1,5 +1,7 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
+import { trackPageView } from './services/analytics'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import SignUp from './pages/SignUp'
@@ -12,6 +14,17 @@ import Seed from './pages/Seed'
 import AddCafe from './pages/AddCafe'
 import MobileLayout from './components/layout/MobileLayout'
 import Loader from './components/common/Loader'
+
+// GA4 doesn't see client-side route changes; report each one as a page view
+function AnalyticsPageViews() {
+  const location = useLocation()
+
+  useEffect(() => {
+    trackPageView(location.pathname)
+  }, [location.pathname])
+
+  return null
+}
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth()
@@ -76,7 +89,9 @@ function PublicOnlyRoute({ children }) {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <AnalyticsPageViews />
+      <Routes>
       {/* Public routes */}
       <Route
         path="/"
@@ -166,6 +181,7 @@ export default function App() {
 
       {/* Catch all */}
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </>
   )
 }

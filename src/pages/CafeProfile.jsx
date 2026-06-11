@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ChevronLeft, Heart, Share2, Plus, LogIn } from 'lucide-react'
 import { Button, Loader } from '../components/common'
@@ -7,6 +7,7 @@ import { PhotoGallery } from '../components/photo'
 import { ReviewList, ReviewForm } from '../components/review'
 import { useCafe, useReviews, useFavorites } from '../hooks'
 import { useAuth } from '../context/AuthContext'
+import { track } from '../services/analytics'
 
 export default function CafeProfile() {
   const { cafeId } = useParams()
@@ -18,6 +19,12 @@ export default function CafeProfile() {
   const [showReviewForm, setShowReviewForm] = useState(false)
 
   const favorited = isAuthenticated && isFavorite(cafeId)
+
+  useEffect(() => {
+    if (cafe) {
+      track('cafe_viewed', { cafe_id: cafeId, cafe_name: cafe.name })
+    }
+  }, [cafe, cafeId])
 
   const handleShare = async () => {
     if (navigator.share) {
