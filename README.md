@@ -1,5 +1,7 @@
 # MapMyMatcha
 
+> **A portfolio project by [Eli Stein](https://www.linkedin.com/in/eli-stein-37570585/)** — full-stack build: maps, reviews, photo uploads, and auth.
+
 A community-driven, mobile-first web app for discovering, rating, and reviewing matcha cafes. Users can browse cafes on an interactive map, leave reviews, save favorites, and submit new spots.
 
 **Stack:** React + Vite · Firebase (Auth, Firestore, Storage) · Google Maps API · Tailwind CSS
