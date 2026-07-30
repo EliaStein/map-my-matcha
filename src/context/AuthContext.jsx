@@ -3,6 +3,8 @@ import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut,
   updateProfile,
   deleteUser,
@@ -14,6 +16,7 @@ import { auth, db } from '../config/firebase'
 import { deleteAccountData } from '../services/users'
 
 const AuthContext = createContext(null)
+const googleProvider = new GoogleAuthProvider()
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -74,6 +77,32 @@ export function AuthProvider({ children }) {
     return loggedInUser
   }
 
+  const signInWithGoogle = async () => {
+    const { user: googleUser } = await signInWithPopup(auth, googleProvider)
+
+    const userRef = doc(db, 'users', googleUser.uid)
+    const userDoc = await getDoc(userRef)
+
+    if (userDoc.exists()) {
+      setUserProfile(userDoc.data())
+    } else {
+      const userData = {
+        email: googleUser.email,
+        displayName: googleUser.displayName,
+        photoURL: googleUser.photoURL,
+        createdAt: serverTimestamp(),
+        hasCompletedOnboarding: false,
+        preferences: {},
+        favorites: []
+      }
+
+      await setDoc(userRef, userData)
+      setUserProfile(userData)
+    }
+
+    return googleUser
+  }
+
   const logOut = async () => {
     await signOut(auth)
     setUserProfile(null)
@@ -111,6 +140,7 @@ export function AuthProvider({ children }) {
     loading,
     signUp,
     logIn,
+    signInWithGoogle,
     logOut,
     deleteAccount,
     refreshUserProfile,

@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronLeft, Leaf } from 'lucide-react'
-import { Button, Input } from '../components/common'
+import { Button, GoogleButton, Input } from '../components/common'
 import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
-  const { logIn } = useAuth()
+  const { logIn, signInWithGoogle } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -29,6 +30,24 @@ export default function Login() {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGoogleSignIn = async () => {
+    setError('')
+    setGoogleLoading(true)
+
+    try {
+      await signInWithGoogle()
+    } catch (err) {
+      console.error(err)
+      if (err.code === 'auth/account-exists-with-different-credential') {
+        setError('An account already exists with this email. Sign in with your password instead.')
+      } else if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+        setError('Failed to sign in with Google. Please try again.')
+      }
+    } finally {
+      setGoogleLoading(false)
     }
   }
 
@@ -102,6 +121,16 @@ export default function Login() {
                 Sign In
               </Button>
             </form>
+
+            <div className="mt-5 flex items-center gap-3">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs text-gray-400 uppercase">or</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+
+            <div className="mt-5">
+              <GoogleButton onClick={handleGoogleSignIn} loading={googleLoading} disabled={loading} />
+            </div>
 
             <div className="mt-6 text-center">
               <p className="text-gray-500">
